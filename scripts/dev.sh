@@ -11,6 +11,11 @@ cd "$(dirname "$0")/.."
 cleanup() { kill 0 2>/dev/null || true; }
 trap cleanup EXIT INT TERM
 
+# Prefer the repo-local .env.dev when running the demo locally. Long-lived shells/tmux sessions can
+# otherwise keep stale API keys in their process environment, and config.py intentionally uses the
+# environment before .env.dev.
+unset ANTHROPIC_API_KEY OS_DATA_HUB_KEY OS_MAPS_API_KEY SURVEYOR_MODEL
+
 if [ ! -d web/node_modules ]; then
   echo "→ installing web dependencies…"
   (cd web && npm install)
@@ -19,7 +24,7 @@ fi
 echo "→ backend   http://localhost:8000   (uvicorn --reload)"
 uv run uvicorn surveyor.app.main:app --reload --port 8000 &
 
-echo "→ frontend  http://localhost:5173   (vite)   ← open this one"
-(cd web && npm run dev) &
+echo "→ frontend  http://127.0.0.1:5173   (vite)   ← open this one"
+(cd web && npm run dev -- --host 127.0.0.1) &
 
 wait

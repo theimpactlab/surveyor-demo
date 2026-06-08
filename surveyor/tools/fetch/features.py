@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 from ... import config
 from ...data.models import GeoDataset, describe
 from ...manifest import capabilities as cap
-from ...sources import os_ngd
+from ...sources import os_ngd, os_wfs
 from ..base import ToolContext, ToolOutcome
 
 
@@ -69,13 +69,32 @@ class FetchFeatures:
             "status",
             {"state": f"fetching {args.feature_type} sites in {region.label} (OS NGD, server-side CQL)"},
         )
-        fc = os_ngd.fetch_items(
-            ft.collection,
-            api_key=config.os_data_hub_key(),
-            bbox=region.bbox,
-            cql_filter=ft.cql_filter,
-            max_features=args.max_features,
-        )
+        try:
+            fc = os_ngd.fetch_items(
+                ft.collection,
+                api_key=config.os_data_hub_key(),
+                bbox=region.bbox,
+                cql_filter=ft.cql_filter,
+                max_features=args.max_features,
+            )
+        except os_ngd.OSNGDError as exc:
+            if args.feature_type != "health_centre":
+                raise
+            ctx.sink.emit(
+                "status",
+                {
+                    "state": (
+                        "OS NGD unavailable; falling back to OS Features API WFS "
+                        "Zoomstack Sites / Medical Care"
+                    )
+                },
+            )
+            fc = os_wfs.fetch_zoomstack_sites(
+                api_key=config.os_data_hub_key(),
+                bbox=region.bbox,
+                site_type="Medical Care",
+                max_features=args.max_features,
+            )
         feats = fc.get("features", [])
         geometry_type = feats[0]["geometry"]["type"] if feats else ft.geometry
         dataset = GeoDataset(features=fc, geometry_type=geometry_type, key_property=None)
