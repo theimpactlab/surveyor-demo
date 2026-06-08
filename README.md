@@ -27,19 +27,21 @@ Two keys are needed, both kept server-side and never sent to the browser. Put th
 
 ```
 ANTHROPIC_API_KEY=...   # the agent loop
-OS_DATA_HUB_KEY=...     # OS NGD feature fetches and the map basemap (a premium API)
+OS_DATA_HUB_KEY=...     # OS feature fetches and the map basemap
 ```
 
 ONS Nomis and the ONS/MHCLG ArcGIS services need no key. The agent runs on `claude-sonnet-4-6` by default; override it with `SURVEYOR_MODEL`. If the OS Vector Tile API lives on a different OS Data Hub project, set `OS_MAPS_API_KEY` for the basemap specifically. Without a working OS key the national, stat-only questions still run — the choropleth simply draws over a plain background, and the UI says so.
+
+Surveyor's primary feature client targets **OS NGD API - Features**. If your OS Data Hub account only exposes the older **OS Features API / WFS**, the Greater Manchester health-centre demo falls back to `Zoomstack_Sites` filtered to `Type = Medical Care`. That fallback is coarser than the original NGD `Health Centre` query, but it lets the headline demo run on standard OS Data Hub projects that include **OS Features API** and **OS Vector Tile API**.
 
 ### The web UI
 
 ```bash
 uv sync                 # install backend dependencies into a local .venv
-./scripts/dev.sh        # uvicorn :8000 + Vite :5173  →  http://localhost:5173
+./scripts/dev.sh        # uvicorn :8000 + Vite :5173  →  http://127.0.0.1:5173
 ```
 
-Open the Vite URL, ask a question (or pick a suggestion), and watch the trace stream into the chat as the choropleth and ranked chart build. Vite proxies `/api/*` to the backend, so it is one origin in the browser. To run the two processes by hand instead, start `uv run uvicorn surveyor.app.main:app --reload --port 8000` and `cd web && npm install && npm run dev` separately.
+Open the Vite URL, ask a question (or pick a suggestion), and watch the trace stream into the chat as the choropleth and ranked chart build. Vite proxies `/api/*` to the backend, so it is one origin in the browser. To run the two processes by hand instead, start `uv run uvicorn surveyor.app.main:app --reload --port 8000` and `cd web && npm install && npm run dev -- --host 127.0.0.1` separately.
 
 To serve everything as a single process — FastAPI hosts the built frontend:
 
@@ -75,7 +77,7 @@ uv run python -m scripts.try_analysis      # the headline analysis chain, no mod
 - A hand-rolled Anthropic tool-use loop on the raw SDK — no agent framework.
 - The agent has three kinds of tool: **fetch** (boundaries, statistics, OS features), six composable **analysis** operations (filter, aggregate, normalize, rank, relate, attach), and three **render** tools (choropleth, chart, points). A composable operation set, not a fixed pipeline — the agent assembles the chain that fits the question.
 - Tools exchange server-side **dataset handles**, not raw data. The model passes small descriptors around while the heavy GeoJSON and tables stay server-side, fetched only when something needs drawing.
-- Three source clients sit behind the fetch tools: ONS/MHCLG ArcGIS (boundaries), ONS Nomis (statistics), and OS NGD (features).
+- Three source clients sit behind the fetch tools: ONS/MHCLG ArcGIS (boundaries), ONS Nomis (statistics), OS NGD (features), plus an OS Features API / WFS fallback for the local health-centre demo.
 - The loop streams its trace through a **swappable event sink**. The CLI sink prints it; the SSE sink streams it to the browser. The loop, tools, and data model are identical either way — only the sink changes.
 
 For the binding decisions and the reasoning behind them, see [`docs/02-architecture.md`](./docs/02-architecture.md).
@@ -104,4 +106,4 @@ When this started, what Surveyor *was* had not been decided. That was deliberate
 
 **General-purpose by design, curated for the demo.** Surveyor is built as an extensible, general-purpose agentic GIS tool: composable fetch and analysis operations over live national data, with no hard-coded pipeline. The v0.1 demo runs that engine on a hand-verified capability manifest — a curated set of places, datasets, fields, and feature types (health-centre provision across Greater Manchester, population by local authority, and more) — which keeps the walkthrough fast and every query valid. Ask outside the curated set and it declines rather than guess. Opening the manifest to the full UK data space — runtime capability discovery, and resolving any place you name — is the planned next step, documented in [#13](https://github.com/johnx25bd/surveyor-demo/issues/13) and [#15](https://github.com/johnx25bd/surveyor-demo/issues/15).
 
-v0.1 is a single-instance prototype — one in-memory dataset store, no auth — and the three-pane layout is built for a wide desktop screen, stacking below ~820px. OS NGD caps feature fetches at 100 per page, which makes feature-aggregation questions regional rather than national; stat-only questions run nationally. See [`docs/05-phase5-review.md`](./docs/05-phase5-review.md) for the full review findings and what's deferred before a public deployment.
+v0.1 is a single-instance prototype — one in-memory dataset store, no auth — and the three-pane layout is built for a wide desktop screen, stacking below ~820px. OS NGD caps feature fetches at 100 per page, which makes feature-aggregation questions regional rather than national; stat-only questions run nationally. The WFS fallback exists only for the Greater Manchester health-centre demo and should be treated as a compatibility layer, not a general replacement for NGD. See [`docs/05-phase5-review.md`](./docs/05-phase5-review.md) for the full review findings and what's deferred before a public deployment.
